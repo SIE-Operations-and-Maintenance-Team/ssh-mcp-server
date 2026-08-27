@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "主窗口默认权限：本地单 exe 架构，前端经本进程 axum HTTP 服务交互；updater 由 Rust 侧 HTTP API 封装。",
+  "local": true,
+  "platforms": ["macOS", "windows", "linux"],
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "updater:default"
+  ]
+}

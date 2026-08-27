@@ -1,0 +1,35 @@
+[package]
+name = "ssh-mcp-server-gui"
+version = "1.0.0"
+edition = "2021"
+
+# 架构对齐 SIE-Operations-and-Maintenance-Team/publish-tools（SmomPublish）：
+# Tauri 2 单 exe —— SSH/MCP/Admin 全部 Rust 原生实现，无 Node sidecar、无 resources 散落。
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs"] }
+axum = "0.8"
+rmcp = { version = "3.0", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
+ssh2 = "0.9"
+include_dir = "0.7"
+tauri-plugin-opener = "2"
+
+# 应用自更新（GitHub Releases latest.json + minisign 验签），架构对齐 SmomPublish
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
+# 托盘"关于"菜单的原生消息弹窗（Rust API 直调，无需前端/capabilities）
+tauri-plugin-dialog = "2"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.7"
+
+[features]
+# This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]

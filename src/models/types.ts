@@ -1,0 +1,104 @@
+import type { Algorithms } from "ssh2";
+
+/**
+ * SSH connection configuration interface
+ */
+export interface SSHConfig {
+  name?: string; // Connection name, optional, compatible with single connection
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  privateKey?: string;
+  passphrase?: string;
+  agent?: string; // SSH agent for authentication (use 'pageant' for Windows Pageant)
+  tryKeyboard?: boolean; // Enable keyboard-interactive authentication. Password prompts use `password`; non-password prompts (e.g. OTP) use the SSH_MCP_2FA_CODE env var. Default: false
+  commandWhitelist?: string[]; // Command whitelist (array of regex strings)
+  commandBlacklist?: string[]; // Command blacklist (array of regex strings)
+  proxy?: string; // Proxy URL supporting SOCKS5, HTTP, and HTTPS
+  socksProxy?: string; // Legacy SOCKS5-only proxy URL
+  algorithms?: Algorithms; // Custom SSH algorithms (kex, cipher, serverHostKey, hmac, compress)
+  pty?: boolean; // Allocate pseudo-tty for command execution, default: true
+  allowedLocalPaths?: string[]; // Allowed local paths for upload/download
+  allowedRemotePaths?: string[]; // Allowed remote paths for SFTP upload/download (POSIX, absolute)
+  transportMode?: "exec" | "shell"; // SSH transport mode, default: exec
+  shellReadyTimeoutMs?: number; // Shell readiness probe timeout, default: 10000ms
+  shellCommandTimeoutMs?: number; // Shell command timeout override, default: 30000ms
+  commandTimeoutMs?: number; // Exec command timeout override, default: 30000ms
+  connectionTimeoutMs?: number; // SSH connection and handshake timeout, default: 30000ms
+  sftpTimeoutMs?: number; // SFTP open and transfer timeout, default: 300000ms
+  maxOutputBytes?: number; // Max captured bytes per command (stdout+stderr) before aborting, default: 10485760; set 0 to disable
+  keepaliveIntervalMs?: number; // SSH keepalive interval, default: 10000ms
+  keepaliveCountMax?: number; // Unanswered keepalive packets before disconnect, default: 3
+  commandTemplate?: string; // Command template, use <quotedCommand> for shell arguments or <command> for raw insertion
+}
+
+/**
+ * Multiple SSH connection configuration Map
+ */
+export type SshConnectionConfigMap = Record<string, SSHConfig>;
+
+/**
+ * Log levels
+ */
+export type LogLevel = "info" | "error" | "debug";
+
+/**
+ * System status information
+ */
+export interface ServerStatus {
+  reachable: boolean;
+  hostname?: string;
+  ipAddresses?: string[];
+  osName?: string;
+  osVersion?: string;
+  kernelVersion?: string;
+  uptime?: string;
+  diskSpace?: {
+    free: string;
+    total: string;
+  };
+  drives?: Array<{
+    device: string;
+    mountPoint: string;
+    total: string;
+    used: string;
+    free: string;
+    usagePercent: string;
+    filesystem?: string;
+  }>;
+  memory?: {
+    free: string;
+    total: string;
+  };
+  cpu?: {
+    name?: string;
+    usage?: string;
+  };
+  gpus?: Array<{
+    name: string;
+    usage?: string;
+    path?: string;
+  }>;
+  processes?: {
+    running: number;
+    threads: number;
+  };
+  services?: {
+    running: number;
+    installed: number;
+  };
+  lastUpdated?: string;
+}
+
+/**
+ * Parsed command line arguments result
+ */
+export interface ParsedArgs {
+  configs: SshConnectionConfigMap;
+  preConnect: boolean;
+  admin?: boolean;
+  adminPort?: number;
+  configFile?: string;
+}
+

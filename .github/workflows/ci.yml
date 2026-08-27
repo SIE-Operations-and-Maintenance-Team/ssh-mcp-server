@@ -1,0 +1,215 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# 发版流程（重要）：
+#   1. 升级版本号：npm run version:bump -- 1.12.0
+#      （以 package.json 为唯一事实源，自动同步 Cargo.toml / tauri.conf.json，并在 CHANGELOG.md 插入新版本骨架）
+#   2. 填写 CHANGELOG.md 当前版本条目，提交推送 main
+#   3. 本地打 tag 并推送：git tag vX.Y.Z && git push origin vX.Y.Z
+#      （tag 必须等于 package.json 的 version 加 v 前缀，流水线会强制校验，不一致直接失败）
+#   4. tag 推送自动触发：测试 → NSIS 打包(含 updater .sig) → 组装 latest.json → GitHub Release
+#
+# 用户端自更新链路：
+#   已安装应用 → 内置 pubkey 验签 → 拉 releases/latest/download/latest.json → 比较/下载/静默安装+重启
+
+jobs:
+  lint-build-test:
+    name: Lint & Build & Test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 版本一致性校验（fail fast）：package.json 是唯一事实源，Cargo.toml/tauri.conf.json 由 bump 脚本同步
+      - name: Verify version consistency
+        shell: pwsh
+        run: |
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $cargo = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "([^"]+)"').Matches.Groups[1].Value
+          $tauri = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if (-not $cargo) { throw "无法从 src-tauri/Cargo.toml 解析版本号" }
+          if (-not $tauri) { throw "无法从 src-tauri/tauri.conf.json 解析版本号" }
+          if ($pkg -ne $cargo) { throw "版本不一致: package.json=$pkg, Cargo.toml=$cargo（请用 npm run version:bump 统一升级）" }
+          if ($pkg -ne $tauri) { throw "版本不一致: package.json=$pkg, tauri.conf.json=$tauri" }
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $tagVersion = $env:GITHUB_REF -replace '^refs/tags/v', ''
+            if ($tagVersion -ne $pkg) { throw "git tag 与版本号不一致: tag=$tagVersion, package.json=$pkg（tag 必须为 v$pkg）" }
+          }
+          Write-Host "✔ 版本一致性校验通过: $pkg"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install admin-web dependencies
+        run: npm --prefix admin-web ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Build backend & frontend
+        run: |
+          npm run build
+          npm --prefix admin-web run build
+
+      - name: Run tests
+        shell: pwsh
+        run: |
+          node scripts/build.js 2>&1 | Tee-Object -FilePath test-output.log
+          node --test test/**/*.test.js 2>&1 | Tee-Object -FilePath test-output.log -Append
+          if ($LASTEXITCODE -ne 0) { Write-Host "--- test-output.log ---"; Get-Content test-output.log; exit $LASTEXITCODE }
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs
+          path: test-output.log
+
+      # Rust 后端（Tauri 2 桌面壳，Windows 上与打包同平台保证构建一致）
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          rust-src-dir: src-tauri
+
+      - name: Cargo check (desktop)
+        working-directory: src-tauri
+        run: cargo check --locked
+
+  # Windows 打包（tag 触发时）：NSIS 安装包 + updater 签名(.sig)
+  build-windows:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    needs: lint-build-test
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install admin-web dependencies and build dist
+        run: |
+          npm --prefix admin-web ci
+          npm --prefix admin-web run build
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          rust-src-dir: src-tauri
+
+      - name: Tauri build (NSIS + updater signature)
+        run: npx tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+      # 重命名为无空格文件名，避免 Release URL 编码问题；.sig 一并暂存供组装 latest.json
+      - name: Stage installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $tag = $env:GITHUB_REF -replace 'refs/tags/', ''
+          $exe = Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          $sig = "$($exe.FullName).sig"
+          $flatName = "SSH-MCP-Server_$($tag)_x64-setup.exe"
+          Copy-Item $exe.FullName "dist/$flatName"
+          Copy-Item $sig "dist/$flatName.sig"
+          Write-Host "✔ staged: dist/$flatName (+.sig)"
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            dist/*.exe
+            dist/*.sig
+
+  # 发布 GitHub Release（tag 触发时）：安装包 + .sig + 自动生成的 latest.json（自更新清单）
+  release:
+    name: Publish Release
+    runs-on: ubuntu-latest
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: ./dist
+
+      - name: Generate latest.json (updater manifest) + release notes
+        shell: bash
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, re, sys, datetime
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          ref = os.environ["GITHUB_REF"]
+          tag = ref.rsplit("/", 1)[-1]
+          version = tag.lstrip("v")
+
+          exe = next(f for f in os.listdir("dist") if f.endswith("-setup.exe"))
+          sig = open(f"dist/{exe}.sig", encoding="utf-8").read().strip()
+          url = f"https://github.com/{repo}/releases/download/{tag}/{exe}"
+
+          # 更新说明取 CHANGELOG 当前版本条目（缺失则失败，避免发布无说明版本）
+          changelog = open("CHANGELOG.md", encoding="utf-8").read()
+          m = re.search(rf"^## v{re.escape(version)}\s*\n(.*?)(?=^## |\Z)", changelog, re.S | re.M)
+          if not m or not m.group(1).strip():
+              sys.exit(f"CHANGELOG.md 中未找到 v{version} 条目，请先补充更新日志再打 tag")
+          notes = m.group(1).strip()
+
+          latest = {
+              "version": version,
+              "notes": notes,
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {
+                  "windows-x86_64": {"signature": sig, "url": url}
+              },
+          }
+          with open("dist/latest.json", "w", encoding="utf-8") as f:
+              json.dump(latest, f, ensure_ascii=False, indent=2)
+              f.write("\n")
+
+          with open("release_notes.md", "w", encoding="utf-8") as f:
+              f.write(notes + "\n")
+          print("latest.json:", json.dumps({**latest, "platforms": {"windows-x86_64": {"signature": "<...>", "url": url}}}, ensure_ascii=False)[:400])
+          PYEOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ./dist/*.exe
+            ./dist/*.sig
+            ./dist/latest.json
+          body_path: release_notes.md
+          generate_release_notes: false

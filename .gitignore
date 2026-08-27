@@ -1,0 +1,51 @@
+# 依赖目录
+node_modules/
+
+# 构建输出
+build/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器和IDE文件
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+memo.md
+
+# claude / codex / ai 工具
+.claude/
+CLAUDE.md
+.mcp.json
+.codex/
+.codegraph/
+.zcode/
+.playwright-mcp/
+
+# 内部文档（仅发布用户指南 migration.md）
+docs/*
+!docs/migration.md
+
+# 开发日志与临时文件
+*.log
+*.tgz
+coverage/
+.nyc_output/
+
+# 截图与图标临时产物（根目录散落的 PNG）
+/*.png
+/logo-design/
+
+# admin-web / tauri
+admin-web/dist
+admin-web/node_modules
+src-tauri/target
+# 桌面壳构建产物（体积大，不进 git，由 build-sidecar.js 生成）
+src-tauri/sidecars/
+src-tauri/resources/
+src-tauri/gen/

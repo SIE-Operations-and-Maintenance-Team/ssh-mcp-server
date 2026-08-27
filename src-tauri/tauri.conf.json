@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SSH MCP Server",
+  "version": "1.0.0",
+  "identifier": "com.sieop.sshmcpserver",
+  "build": {
+    "frontendDist": "../admin-web/dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "copyright": "",
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "targets": [
+      "nsis"
+    ],
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "languages": [
+          "SimpChinese"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVBNTAxMkI2OTJBRTMwRTEKUldUaE1LNlN0aEpRV3JCcnFMbzlXblppak1aK1k3MTFhMVBUNS9hTFVRbGFCVE03d1hYN2l4M3EK",
+      "endpoints": [
+        "https://github.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

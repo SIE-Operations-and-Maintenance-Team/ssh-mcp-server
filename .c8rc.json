@@ -1,0 +1,6 @@
+{
+  "all": true,
+  "include": ["src/**/*.ts", "build/**/*.js"],
+  "reporter": ["text", "html", "lcov", "json-summary"],
+  "report-dir": "coverage"
+}
