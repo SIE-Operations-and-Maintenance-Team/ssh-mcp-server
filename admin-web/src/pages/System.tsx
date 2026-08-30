@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Form, Input, InputNumber, Button, Select, message, Card, Descriptions, Typography, Tag, Space, Switch, Popconfirm, Modal, Row, Col } from "antd";
+import { Form, Input, InputNumber, Button, Select, message, Card, Descriptions, Typography, Tag, Space, Switch, Popconfirm, Modal, Row, Col, theme } from "antd";
 import { DashboardOutlined, ThunderboltOutlined, CheckCircleOutlined, LoginOutlined, SyncOutlined, PoweroffOutlined } from "@ant-design/icons";
 import { api } from "../api/client";
 export default function System(){
+  const { token } = theme.useToken();
   const [info,setInfo]=useState<any>({});
   const [form]=Form.useForm();
   const [auto,setAuto]=useState<{enabled:boolean;supported:boolean}>({enabled:false,supported:true});
@@ -105,12 +106,12 @@ export default function System(){
   return (
     <div style={{display:"flex", flexDirection:"column", gap:16}}>
       <Typography.Title level={4} style={{margin:0,fontWeight:700}}><DashboardOutlined style={{color:"#1677ff", marginRight:8}}/>系统</Typography.Title>
-      <Card style={{borderRadius:16, boxShadow:"0 2px 12px rgba(0,0,0,0.04)", background:"linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%)"}} bodyStyle={{padding:20}}>
+      <Card style={{borderRadius:16, boxShadow:"0 2px 12px rgba(0,0,0,0.04)", background:`linear-gradient(135deg, ${token.colorPrimaryBg} 0%, ${token.colorBgContainer} 100%)`}} bodyStyle={{padding:20}}>
         <Space style={{marginBottom:12}}>
           <Tag color="blue" icon={<ThunderboltOutlined/>}>运行中</Tag>
           <Tag>本地可信</Tag>
         </Space>
-        <Descriptions column={1} labelStyle={{width:120,color:"#6b7280"}} contentStyle={{fontWeight:600}}>
+        <Descriptions column={1} labelStyle={{width:120,color:token.colorTextSecondary}} contentStyle={{fontWeight:600}}>
           <Descriptions.Item label="服务端口">{info.port||"-"}</Descriptions.Item>
           <Descriptions.Item label="版本号">{info.version||"-"}</Descriptions.Item>
           <Descriptions.Item label="运行平台">{info.platform||"-"}</Descriptions.Item>

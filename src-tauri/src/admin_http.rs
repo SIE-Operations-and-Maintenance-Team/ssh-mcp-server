@@ -624,58 +624,33 @@ async fn audit_query(Query(q): Query<AuditQueryParams>) -> ApiResult {
 // ── backups ──
 
 fn backups_dir() -> std::path::PathBuf {
-    config::config_path()
-        .parent()
-        .unwrap_or(std::path::Path::new("."))
-        .join("backups")
+    crate::backup::backups_dir()
 }
 
 async fn backups_list() -> ApiResult {
-    let dir = backups_dir();
-    let mut items = vec![];
-    if let Ok(rd) = std::fs::read_dir(&dir) {
-        let mut files: Vec<_> = rd
-            .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map(|x| x == "json").unwrap_or(false))
-            .collect();
-        files.sort_by_key(|e| std::cmp::Reverse(e.file_name()));
-        for f in files {
-            let ts = f
-                .metadata()
-                .ok()
-                .and_then(|m| m.modified().ok())
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0);
-            items.push(serde_json::json!({
-                "id": f.file_name().to_string_lossy(),
-                "name": f.file_name().to_string_lossy(),
-                "path": f.path().display().to_string(),
+    // 时间以文件名内嵌时间戳为准（Windows 复制保留源 mtime，mtime 不可信）
+    let items: Vec<serde_json::Value> = crate::backup::list_files()
+        .into_iter()
+        .map(|(p, ts)| {
+            serde_json::json!({
+                "id": p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default(),
+                "name": p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default(),
+                "path": p.display().to_string(),
                 "ts": ts,
-            }));
-        }
-    }
+            })
+        })
+        .collect();
     Ok(ok_json(serde_json::Value::Array(items)))
 }
 
 async fn backups_snapshot() -> ApiResult {
-    let dir = backups_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| err400("BACKUP_FAILED", e.to_string()))?;
-    let now = chrono_like_now_filename();
-    let dst = dir.join(format!("config-{now}.json"));
-    let src = config::config_path();
-    if src.exists() {
-        std::fs::copy(&src, &dst).map_err(|e| err400("BACKUP_FAILED", e.to_string()))?;
-    } else {
-        let cfg = config::load();
-        let j = serde_json::to_string_pretty(&cfg).unwrap_or_default();
-        std::fs::write(&dst, j).map_err(|e| err400("BACKUP_FAILED", e.to_string()))?;
-    }
+    let name = crate::backup::do_snapshot().map_err(|e| err400("BACKUP_FAILED", e))?;
+    let path = crate::backup::backups_dir().join(&name);
     Ok(ok_json(serde_json::json!({
-        "id": dst.file_name().unwrap().to_string_lossy(),
-        "name": dst.file_name().unwrap().to_string_lossy(),
-        "path": dst.display().to_string(),
-        "ts": now_ms(),
+        "id": name,
+        "name": name,
+        "path": path.display().to_string(),
+        "ts": crate::backup::now_ms(),
     })))
 }
 
@@ -695,53 +670,8 @@ async fn backups_restore(Path(id): Path<String>) -> ApiResult {
 }
 
 fn do_snapshot_internal() -> Result<(), Response> {
-    let dir = backups_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| err400("BACKUP_FAILED", e.to_string()))?;
-    let src = config::config_path();
-    if src.exists() {
-        let now = chrono_like_now_filename();
-        let _ = std::fs::copy(&src, dir.join(format!("config-{now}.json")));
-    }
+    crate::backup::do_snapshot().map_err(|e| err400("BACKUP_FAILED", e))?;
     Ok(())
-}
-
-fn chrono_like_now_filename() -> String {
-    // 2026-08-26T15-30-00-000Z 形式（对齐 Node toISOString replace [:.]→-）
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0);
-    let days = now / 86_400_000;
-    let rem = now % 86_400_000;
-    let (h, mi, s, ms) = (
-        rem / 3_600_000,
-        (rem % 3_600_000) / 60_000,
-        (rem % 60_000) / 1000,
-        rem % 1000,
-    );
-    // 简化日期换算（自 1970 天数 → Y-M-D）
-    let (y, m, d) = civil_from_days(days as i64);
-    format!("{y:04}-{m:02}-{d:02}T{h:02}-{mi:02}-{s:02}-{ms:03}Z")
-}
-
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (if m <= 2 { y + 1 } else { y }, m, d)
-}
-
-fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
 }
 
 // ── 排序 / 导入导出 / 注册 MCP / 自启动 / 重启 ──

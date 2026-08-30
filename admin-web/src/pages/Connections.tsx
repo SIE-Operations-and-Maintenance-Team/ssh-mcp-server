@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Table, Button, Modal, Form, Input, InputNumber, message, Popconfirm, Card, Space, Tag, Empty, Typography, Collapse, Switch, Select, Alert, Upload, List, Spin } from "antd";
+import { Table, Button, Modal, Form, Input, InputNumber, message, Popconfirm, Card, Space, Tag, Empty, Typography, Collapse, Switch, Select, Alert, Upload, List, Spin, theme } from "antd";
 import { PlusOutlined, ReloadOutlined, ApiOutlined, SafetyCertificateOutlined, DownloadOutlined, UploadOutlined, InfoCircleOutlined, ProjectOutlined, AppstoreOutlined, EditOutlined, DeleteOutlined, StarOutlined, StarFilled } from "@ant-design/icons";
 import { api } from "../api/client";
 
@@ -28,6 +28,7 @@ function DraggableRow({ moveRow, dragKeyRef, ...restProps }: any) {
 }
 
 export default function Connections() {
+  const { token } = theme.useToken();
   const [projects, setProjects] = useState<any[]>([]);
   const [activeProject, setActiveProject] = useState<string | null>(null);
   const [projectDetail, setProjectDetail] = useState<any>(null);
@@ -568,7 +569,7 @@ export default function Connections() {
                     onDragStart={() => setDragProjectIndex(index)}
                     onDragOver={(e) => e.preventDefault()}
                     onDrop={() => { if (dragProjectIndex !== null) reorderProjects(dragProjectIndex, index); setDragProjectIndex(null); }}
-                    style={{ cursor: "grab", background: isActive ? "#e6f4ff" : undefined, borderRadius: 8, padding: "8px 10px", marginBottom: 6, border: isActive ? "1px solid #91caff" : "1px solid transparent" }}
+                    style={{ cursor: "grab", background: isActive ? token.colorPrimaryBg : undefined, borderRadius: 8, padding: "8px 10px", marginBottom: 6, border: isActive ? `1px solid ${token.colorPrimaryBorder}` : "1px solid transparent" }}
                     actions={[
                       <Button key="edit" type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); openEditProject(item); }} />,
                       <Popconfirm key="del" title="确认删除该项目吗？级联删除全部环境与主机" okText="确认" cancelText="取消" onConfirm={() => deleteProject(item.name)}>

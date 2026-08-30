@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Form, Input, Alert, Card, Typography, Button, Space, Tag, message } from "antd";
+import { Form, Input, Alert, Card, Typography, Button, Space, Tag, message, theme } from "antd";
 import { SafetyCertificateOutlined, ReloadOutlined, WarningOutlined, SaveOutlined } from "@ant-design/icons";
 import { api } from "../api/client";
 
 const stripCaret = (s:string)=> s.startsWith("^") ? s.slice(1) : s;
 
 export default function Security(){
+  const { token } = theme.useToken();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -77,7 +78,7 @@ export default function Security(){
             extra="默认已屏蔽高危操作，可按需增删；无需输入行首 ^，系统会自动为每条规则补 ^ 锚定"
             rules={[{validator:validateRegex}]}
           >
-            <Input.TextArea rows={7} placeholder={defaultBlacklist || "rm\\s+.*\nshutdown.*"} style={{ borderRadius:10, fontFamily:"ui-monospace, monospace", fontSize:13, borderColor:"#ff4d4f", background:"#fff1f0" }} />
+            <Input.TextArea rows={7} placeholder={defaultBlacklist || "rm\\s+.*\nshutdown.*"} style={{ borderRadius:10, fontFamily:"ui-monospace, monospace", fontSize:13, borderColor:token.colorError, background:token.colorErrorBg }} />
           </Form.Item>
           <div style={{ marginTop:-8, marginBottom:16, display:"flex", flexWrap:"wrap", gap:8, alignItems:"center" }}>
             <Typography.Text type="danger" style={{ fontSize:12, fontWeight:600 }}><WarningOutlined /> 当前高危拦截预览：</Typography.Text>

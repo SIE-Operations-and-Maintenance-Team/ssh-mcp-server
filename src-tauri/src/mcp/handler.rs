@@ -73,10 +73,11 @@ impl McpHandler {
         &self,
         conn: &str,
         tool_name: &str,
+        detail: &str,
         r: Result<T, String>,
     ) -> Result<CallToolResult, ErrorData> {
         let ok = r.is_ok();
-        audit::log(&self.app_handle, conn, tool_name, ok);
+        audit::log(&self.app_handle, conn, tool_name, ok, detail);
         match r {
             Ok(val) => {
                 let text = match serde_json::to_string(&val) {
@@ -94,10 +95,11 @@ impl McpHandler {
         &self,
         conn: &str,
         tool_name: &str,
+        detail: &str,
         r: Result<String, String>,
     ) -> Result<CallToolResult, ErrorData> {
         let ok = r.is_ok();
-        audit::log(&self.app_handle, conn, tool_name, ok);
+        audit::log(&self.app_handle, conn, tool_name, ok, detail);
         match r {
             Ok(text) => Ok(CallToolResult::success(vec![ContentBlock::text(text)])),
             Err(e) => Err(ErrorData::internal_error(e, None)),
@@ -178,15 +180,16 @@ impl McpHandler {
         Parameters(params): Parameters<crate::mcp::types::ExecuteCommandParam>,
     ) -> Result<CallToolResult, ErrorData> {
         let all = self.cfg();
+        // 完整命令在进入执行块前先拼好，供执行与审计明细共用
+        let full = match &params.directory {
+            Some(dir) => format!("cd -- {} && {}", shell_quote(dir), params.cmd_string),
+            None => params.cmd_string.clone(),
+        };
         let run = async {
             let (key, hcfg) = self.resolve(&params.connection_name, &all)?;
             check_unsupported_features(&key, &hcfg)?;
             Self::validate_command(&hcfg, &params.cmd_string)?;
 
-            let full = match &params.directory {
-                Some(dir) => format!("cd -- {} && {}", shell_quote(dir), params.cmd_string),
-                None => params.cmd_string.clone(),
-            };
             let timeout_ms = params
                 .timeout
                 .or(hcfg.effective_command_timeout().into())
@@ -212,7 +215,7 @@ impl McpHandler {
             .connection_name
             .clone()
             .unwrap_or_else(|| "default".into());
-        self.to_text(&conn_name, "execute-command", run.await)
+        self.to_text(&conn_name, "execute-command", &full, run.await)
     }
 
     #[tool(name = "list-servers", description = "List all available SSH server configurations")]
@@ -246,7 +249,7 @@ impl McpHandler {
         }
         text.push_str("\nRaw JSON:\n");
         text.push_str(&serde_json::to_string(&servers).unwrap_or_default());
-        self.to_text("(none)", "list-servers", Ok(text))
+        self.to_text("(none)", "list-servers", "", Ok(text))
     }
 
     #[tool(name = "list-directory", description = "List entries of a remote directory via SFTP (name/type/size/mtime)")]
@@ -270,7 +273,8 @@ impl McpHandler {
             .connection_name
             .clone()
             .unwrap_or_else(|| "default".into());
-        self.to_result(&conn_name, "list-directory", run.await)
+        let detail = params.remote_path.clone();
+        self.to_result(&conn_name, "list-directory", &detail, run.await)
     }
 
     #[tool(name = "upload", description = "Upload file to connected server via SFTP")]
@@ -299,7 +303,8 @@ impl McpHandler {
             .connection_name
             .clone()
             .unwrap_or_else(|| "default".into());
-        self.to_text(&conn_name, "upload", run.await)
+        let detail = format!("{} → {}", params.local_path, params.remote_path);
+        self.to_text(&conn_name, "upload", &detail, run.await)
     }
 
     #[tool(name = "download", description = "Download file from connected server via SFTP")]
@@ -328,7 +333,8 @@ impl McpHandler {
             .connection_name
             .clone()
             .unwrap_or_else(|| "default".into());
-        self.to_text(&conn_name, "download", run.await)
+        let detail = format!("{} → {}", params.remote_path, params.local_path);
+        self.to_text(&conn_name, "download", &detail, run.await)
     }
 }
 

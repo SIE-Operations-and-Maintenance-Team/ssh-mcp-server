@@ -4,6 +4,15 @@ import type { ConfigStore } from "./config-store.js";
 
 export interface BackupItem { id: string; name: string; path: string; ts: number }
 
+/** 从备份文件名解析创建时间（config-YYYY-MM-DDTHH-mm-ss-sssZ.json，UTC）；解析失败返回 null。
+ *  不直接用 mtime：Windows 上 copyFile 保留源文件的 mtime，会让所有备份展示同一时间 */
+export function tsFromName(name: string): number | null {
+  const m = /^config-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z\.json$/.exec(name);
+  if (!m) return null;
+  const [, y, mo, d, h, mi, s, ms] = m;
+  return Date.UTC(+y, +mo - 1, +d, +h, +mi, +s, +ms);
+}
+
 export class BackupService {
   constructor(private store: ConfigStore) {}
   private get dir() { return path.join(path.dirname(this.store.path), "backups"); }
@@ -44,6 +53,9 @@ export class BackupService {
         await fs.writeFile(dst, JSON.stringify(cfg, null, 2), "utf-8");
       } else throw e;
     }
+    // Windows copyFile 保留源 mtime，重置为当前时间，让文件系统时间与备份创建时间一致
+    const now = new Date();
+    try { await fs.utimes(dst, now, now); } catch {}
     // 自动按保留策略清理
     try {
       const cfg: any = await this.store.load();
@@ -58,6 +70,12 @@ export class BackupService {
       const items: BackupItem[] = [];
       for (const f of files.filter(f => f.endsWith(".json")).sort().reverse()) {
         const p = path.join(this.dir, f);
+        // 优先用文件名内嵌时间戳；非标准命名回退到 mtime
+        const fromName = tsFromName(f);
+        if (fromName !== null) {
+          items.push({ id: f, name: f, path: p, ts: fromName });
+          continue;
+        }
         try {
           const stat = await fs.stat(p);
           items.push({ id: f, name: f, path: p, ts: stat.mtimeMs });

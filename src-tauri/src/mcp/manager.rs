@@ -103,6 +103,8 @@ pub fn init(app_handle: &tauri::AppHandle) {
     let handle = app_handle.clone();
     tauri::async_runtime::spawn(async move { manager_loop(handle, receiver).await });
     notify_change();
+    // 定时备份调度（快照 + 保留策略清理）
+    crate::backup::spawn_scheduler();
 }
 
 /// 配置变更后调用：按新配置启停/换端口

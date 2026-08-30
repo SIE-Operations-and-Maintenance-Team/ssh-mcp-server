@@ -98,7 +98,7 @@ export default function Settings() {
           <Form.Item name="auditEnabled" label="启用审计" valuePropName="checked">
             <Switch />
           </Form.Item>
-          <Form.Item name="auditLogResults" label="记录执行结果" valuePropName="checked">
+          <Form.Item name="auditLogResults" label="记录成功执行" valuePropName="checked" extra="开启后成功执行的命令/传输也记入审计日志（含命令与路径，可在审计日志页查看详情）；关闭后仅记录失败操作">
             <Switch />
           </Form.Item>
           <Form.Item name="auditRetentionDays" label="审计保留天数">

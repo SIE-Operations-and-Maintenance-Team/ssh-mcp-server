@@ -290,12 +290,12 @@ export class SSHConnectionManager {
   }
 
   /** 审计埋点：enabled=false 全关；logResults=false 只记失败。存储异常静默，不影响命令执行 */
-  private auditLog(connection: string, tool: string, ok: boolean): void {
+  private auditLog(connection: string, tool: string, ok: boolean, detail?: string): void {
     const audit = (this.currentConfig as any)?.audit;
     if (audit?.enabled === false) return;
     if (ok && audit?.logResults === false) return;
     try {
-      globalAuditStore.log({ connection, tool, status: ok ? "ok" : "fail" });
+      globalAuditStore.log({ connection, tool, status: ok ? "ok" : "fail", sql: detail });
     } catch {}
   }
 
@@ -529,10 +529,10 @@ export class SSHConnectionManager {
   ): Promise<string> {
     try {
       const result = await this.runCommandInternal(cmdString, directory, name, options);
-      this.auditLog(this.auditName(name), "execute-command", true);
+      this.auditLog(this.auditName(name), "execute-command", true, directory ? `cd ${directory} && ${cmdString}` : cmdString);
       return result;
     } catch (e) {
-      this.auditLog(this.auditName(name), "execute-command", false);
+      this.auditLog(this.auditName(name), "execute-command", false, directory ? `cd ${directory} && ${cmdString}` : cmdString);
       throw e;
     }
   }
@@ -682,10 +682,10 @@ export class SSHConnectionManager {
   ): Promise<string> {
     try {
       const result = await this.uploadInternal(localPath, remotePath, name);
-      this.auditLog(this.auditName(name), "upload", true);
+      this.auditLog(this.auditName(name), "upload", true, `${localPath} → ${remotePath}`);
       return result;
     } catch (e) {
-      this.auditLog(this.auditName(name), "upload", false);
+      this.auditLog(this.auditName(name), "upload", false, `${localPath} → ${remotePath}`);
       throw e;
     }
   }
@@ -785,10 +785,10 @@ export class SSHConnectionManager {
   ): Promise<Array<{ name: string; type: string; size?: number; mtimeMs?: number }>> {
     try {
       const result = await this.listDirectoryInternal(remotePath, name);
-      this.auditLog(this.auditName(name), "list-directory", true);
+      this.auditLog(this.auditName(name), "list-directory", true, remotePath);
       return result;
     } catch (e) {
-      this.auditLog(this.auditName(name), "list-directory", false);
+      this.auditLog(this.auditName(name), "list-directory", false, remotePath);
       throw e;
     }
   }
@@ -866,10 +866,10 @@ export class SSHConnectionManager {
   ): Promise<string> {
     try {
       const result = await this.downloadInternal(remotePath, localPath, name);
-      this.auditLog(this.auditName(name), "download", true);
+      this.auditLog(this.auditName(name), "download", true, `${remotePath} → ${localPath}`);
       return result;
     } catch (e) {
-      this.auditLog(this.auditName(name), "download", false);
+      this.auditLog(this.auditName(name), "download", false, `${remotePath} → ${localPath}`);
       throw e;
     }
   }

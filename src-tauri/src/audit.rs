@@ -12,13 +12,16 @@ pub struct AuditEntry {
     pub connection: String,
     pub tool: String,
     pub status: String,
+    /// 命令 / 路径明细（对齐 Node 版 AuditEntry.sql，供审计页预览）
+    #[serde(default)]
+    pub sql: String,
 }
 
 static AUDIT: Mutex<Vec<AuditEntry>> = Mutex::new(Vec::new());
 static NEXT_ID: Mutex<u64> = Mutex::new(1);
 
 /// 返回 false 表示审计被配置关闭
-pub fn log(_app: &AppHandle, connection: &str, tool: &str, ok: bool) -> bool {
+pub fn log(_app: &AppHandle, connection: &str, tool: &str, ok: bool, detail: &str) -> bool {
     let cfg = crate::config::load();
     let audit = cfg.audit.unwrap_or_default();
     if audit.enabled == Some(false) {
@@ -34,6 +37,7 @@ pub fn log(_app: &AppHandle, connection: &str, tool: &str, ok: bool) -> bool {
         connection: connection.to_string(),
         tool: tool.to_string(),
         status: if ok { "ok".into() } else { "fail".into() },
+        sql: detail.to_string(),
     };
     *next += 1;
     drop(next);
@@ -72,7 +76,7 @@ pub fn query(
         .into_iter()
         .filter(|r| {
             if let Some(ql) = &q_lower {
-                let hay = format!("{} {} {}", r.connection, r.tool, r.status).to_lowercase();
+                let hay = format!("{} {} {} {}", r.connection, r.tool, r.status, r.sql).to_lowercase();
                 if !hay.contains(ql) {
                     return false;
                 }
