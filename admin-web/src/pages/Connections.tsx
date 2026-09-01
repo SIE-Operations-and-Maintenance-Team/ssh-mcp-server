@@ -579,7 +579,7 @@ export default function Connections() {
                   >
                     <List.Item.Meta
                       title={<span style={{ fontWeight: isActive ? 700 : 400 }}>{item.displayName ? `${item.displayName} (${item.name})` : item.name}{item.defaultEnvironment ? <Tag color="gold" icon={<StarFilled />} style={{ marginLeft: 6, borderRadius: 10 }}>默认:{envLabelMap[item.defaultEnvironment] || item.defaultEnvironment}</Tag> : null}</span>}
-                      description={<span style={{ fontSize: 12 }}>{item.environmentCount} 环境 · {item.hostCount} 主机</span>}
+                      description={<span style={{ fontSize: 12 }}>{item.environmentCount} 环境 · {item.hostCount} 主机{item.hostCount === 0 ? <Tag color="orange" style={{ marginLeft: 8, borderRadius: 10, fontSize: 11 }}>未配置主机</Tag> : null}</span>}
                     />
                   </List.Item>
                 );
