@@ -1,6 +1,6 @@
 [package]
 name = "ssh-mcp-server-gui"
-version = "1.0.2"
+version = "1.0.3"
 edition = "2021"
 
 # 架构对齐 SIE-Operations-and-Maintenance-Team/publish-tools（SmomPublish）：
@@ -18,6 +18,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time",
 axum = "0.8"
 rmcp = { version = "3.0", default-features = false, features = ["server", "macros", "transport-streamable-http-server"] }
 ssh2 = "0.9"
+# 审计日志持久化（bundled：自带 SQLite C 源码，Windows 免系统依赖）
+rusqlite = { version = "0.32", features = ["bundled"] }
 include_dir = "0.7"
 tauri-plugin-opener = "2"
 
