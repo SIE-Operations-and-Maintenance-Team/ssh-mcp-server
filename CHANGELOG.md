@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.0.4
+
+v1.0.3 标签推送后发布流水线未产出安装包（未生成 Release），本版本重新发布同一批修复，审计日志持久化正式交付；另附升级后审计丢失问题的根因诊断文档。
+
+### 功能
+
+- **审计日志持久化（桌面版）**：审计记录写入 `%ProgramData%\SshMcpServer\audit.db`（与 config.json 同目录，NSIS 升级保留），表结构与查询语义对齐 Node 版，新增 `ts` 索引；此前为内存 RingBuffer（上限 5000 条），任何进程重启（升级/托盘重启服务/崩溃/关机）都会清空全部审计记录
+- **保留天数生效（桌面版）**：设置页「审计保留天数」现于每次写入时清理过期记录，与 Node 版行为一致
+
+### 修复
+
+- 
+
+**对比 v1.0.3**：https://github.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server/compare/v1.0.3...v1.0.4
+
 ## v1.0.3
 
 修复桌面版审计日志随进程重启丢失的问题：审计记录落盘 SQLite，升级/重启不再清空。
