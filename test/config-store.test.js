@@ -52,4 +52,32 @@ describe("config-store", () => {
     assert.deepEqual(loaded.projects, {});
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
+
+  it("should backfill empty host name from map key on load", async () => {
+    // 模拟桌面版历史导入的脏数据：key 有名称、对象内 name 为空串
+    // （ConnectionSchema.name 有 min(1) 约束，不归一化整个 load 会抛错）
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "ssh-mcp-test-"));
+    const configPath = path.join(tmpDir, "config.json");
+    const dirty = {
+      port: 61823,
+      projects: {
+        p1: {
+          environments: {
+            e1: {
+              hosts: {
+                "web-01": { name: "", host: "10.0.0.1", port: 22, username: "root" },
+                "web-02": { name: "web-02", host: "10.0.0.2", port: 22, username: "root" },
+              },
+            },
+          },
+        },
+      },
+    };
+    await fs.writeFile(configPath, JSON.stringify(dirty), "utf-8");
+    const loaded = await new ConfigStore({ configPath }).load();
+    const hosts = loaded.projects.p1.environments.e1.hosts;
+    assert.equal(hosts["web-01"].name, "web-01"); // 空 name 用 key 回填
+    assert.equal(hosts["web-02"].name, "web-02"); // 已有 name 保持
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
 });

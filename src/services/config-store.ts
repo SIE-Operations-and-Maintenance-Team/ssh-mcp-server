@@ -34,6 +34,30 @@ function nullToJsonReviver(_key: string, value: any): any {
   return value === null ? undefined : value;
 }
 
+/**
+ * 主机名读兜底：hosts map 的 key 是唯一标识，Rust 桌面版历史导入的数据
+ * 对象内 name 可能为空串（显示为空、编辑变新增）。必须在 Zod parse 之前
+ * 回填——ConnectionSchema.name 有 min(1) 约束，空 name 会让整个 load 抛错。
+ */
+function normalizeHostNames(raw: any): any {
+  for (const proj of Object.values(raw?.projects || {})) {
+    for (const env of Object.values((proj as any)?.environments || {})) {
+      const hosts: Record<string, any> | undefined = (env as any)?.hosts;
+      if (!hosts) continue;
+      for (const [hName, hCfg] of Object.entries(hosts)) {
+        if (
+          hCfg && typeof hCfg === "object" &&
+          typeof hCfg.name === "string" && hCfg.name.trim() === "" &&
+          hName.trim() !== ""
+        ) {
+          hCfg.name = hName;
+        }
+      }
+    }
+  }
+  return raw;
+}
+
 export function getFlatHosts(
   cfg: GlobalConfig,
 ): Map<string, { project: string; environment: string; host: string; config: any }> {
@@ -76,7 +100,7 @@ export class ConfigStore {
     try {
       const raw = await fs.readFile(this.path, "utf-8");
       const parsed = JSON.parse(raw, nullToJsonReviver);
-      return GlobalConfigSchema.parse(parsed);
+      return GlobalConfigSchema.parse(normalizeHostNames(parsed));
     } catch (e: any) {
       if (e.code === "ENOENT") return { port: DEFAULT_ADMIN_PORT, projects: {} };
       throw e;

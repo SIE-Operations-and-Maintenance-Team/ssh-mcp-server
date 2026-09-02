@@ -17,6 +17,9 @@ fn main() {
             tray::open_admin();
         }))
         .setup(|app| {
+            // 存量数据迁移：修复历史导入产生的主机 name 缺失（落盘，幂等）
+            ssh_mcp_server_gui::config::migrate();
+
             // 托盘
             tray::ssh_menu(app.handle()).expect("初始化托盘失败");
 

@@ -158,6 +158,23 @@ impl GlobalConfig {
         self.port.unwrap_or(DEFAULT_ADMIN_PORT)
     }
 
+    /// 主机名归一化：hosts map 的 key 是唯一权威标识，历史导入（如 PublishTools
+    /// 同步）的数据对象内 name 可能为空串，统一用 key 回填。幂等，返回是否有修改。
+    pub fn normalize_host_names(&mut self) -> bool {
+        let mut changed = false;
+        for proj in self.projects.values_mut() {
+            for env in proj.environments.values_mut() {
+                for (h_name, hc) in env.hosts.iter_mut() {
+                    if hc.name.trim().is_empty() && !h_name.trim().is_empty() {
+                        hc.name = h_name.clone();
+                        changed = true;
+                    }
+                }
+            }
+        }
+        changed
+    }
+
     /// 展开 `project/env/host → HostConfig`（键为 `p/e/h` 扁平名），
     /// 并应用全局安全兜底：白名单/路径连接级留空则跟随全局，黑名单取并集。
     pub fn flatten_hosts(&self) -> BTreeMap<String, (String, String, String, HostConfig)> {
@@ -261,6 +278,14 @@ fn home_dir() -> String {
 
 /// 加载配置；不存在返回默认值（port=61823），损坏时同样落回默认并打印告警
 pub fn load() -> GlobalConfig {
+    let mut cfg = load_raw();
+    // 读兜底：存量脏数据（对象内 name 为空）统一用 key 回填，保证所有读路径拿到一致数据
+    cfg.normalize_host_names();
+    cfg
+}
+
+/// 读取原始配置（不做归一化，供迁移判断原始数据是否脏）
+fn load_raw() -> GlobalConfig {
     let path = config_path();
     if !path.exists() {
         return GlobalConfig {
@@ -286,6 +311,18 @@ pub fn load() -> GlobalConfig {
     }
 }
 
+/// 启动迁移：治愈存量脏数据（name 为空的主机回填 key）并落盘；数据干净时不写盘
+pub fn migrate() {
+    let mut cfg = load_raw();
+    if !cfg.normalize_host_names() {
+        return;
+    }
+    match save(&cfg) {
+        Ok(()) => eprintln!("[config] 已修复主机名称缺失的存量数据"),
+        Err(e) => eprintln!("[config] 存量数据修复写入失败: {e}"),
+    }
+}
+
 /// 原子保存（.bak 备份 + tmp + rename，对齐 Node ConfigStore.save）
 pub fn save(cfg: &GlobalConfig) -> Result<(), String> {
     let path = config_path();
@@ -300,4 +337,56 @@ pub fn save(cfg: &GlobalConfig) -> Result<(), String> {
     std::fs::write(&tmp, &json).map_err(|e| format!("写入临时文件失败: {e}"))?;
     std::fs::rename(&tmp, &path).map_err(|e| format!("替换配置文件失败: {e}"))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn host(name: &str) -> HostConfig {
+        HostConfig {
+            name: name.to_string(),
+            host: "127.0.0.1".into(),
+            port: 22,
+            username: "root".into(),
+            ..Default::default()
+        }
+    }
+
+    fn cfg_with_hosts(pairs: &[(&str, &str)]) -> GlobalConfig {
+        // pairs: (key, 对象内 name)
+        let mut env = EnvironmentConfig::default();
+        for (k, n) in pairs {
+            env.hosts.insert(k.to_string(), host(n));
+        }
+        let mut proj = ProjectConfig::default();
+        proj.environments.insert("导入".into(), env);
+        let mut cfg = GlobalConfig::default();
+        cfg.projects.insert("p1".into(), proj);
+        cfg
+    }
+
+    #[test]
+    fn normalize_fills_empty_names_from_key() {
+        let mut cfg = cfg_with_hosts(&[("扬兴-正式环境", ""), ("广州", "广州")]);
+        assert!(cfg.normalize_host_names());
+        let hosts = &cfg.projects["p1"].environments["导入"].hosts;
+        assert_eq!(hosts["扬兴-正式环境"].name, "扬兴-正式环境");
+        assert_eq!(hosts["广州"].name, "广州"); // 已有 name 不动
+    }
+
+    #[test]
+    fn normalize_is_idempotent() {
+        let mut cfg = cfg_with_hosts(&[("a", ""), ("b", "b")]);
+        assert!(cfg.normalize_host_names());
+        assert!(!cfg.normalize_host_names()); // 第二次无修改
+    }
+
+    #[test]
+    fn normalize_skips_blank_key() {
+        // key 本身为空白时不回填（空白 key 属非法数据，由导入侧告警拦截）
+        let mut cfg = cfg_with_hosts(&[("  ", "")]);
+        assert!(!cfg.normalize_host_names());
+        assert_eq!(cfg.projects["p1"].environments["导入"].hosts["  "].name, "");
+    }
 }

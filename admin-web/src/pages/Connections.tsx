@@ -64,15 +64,20 @@ export default function Connections() {
   const [exporting, setExporting] = useState(false);
 
   // 按 hostOrder 数组返回排序后的主机列表（对象 key 对纯数字名会重排，不能依赖 key 顺序）
+  // 兜底：对象内 name 为空（历史导入脏数据）时用 map key 补齐，保证展示与编辑标识（rowKey/editingHost）一致
   const getOrderedHosts = (env: any): any[] => {
     const hostsMap = env?.hosts || {};
+    const withKey = (k: string, v: any): any =>
+      v && typeof v.name === "string" && v.name.trim() ? v : { ...v, name: k };
     const order = env?.hostOrder;
-    if (!Array.isArray(order) || order.length === 0) return Object.values(hostsMap);
+    if (!Array.isArray(order) || order.length === 0) {
+      return Object.entries(hostsMap).map(([k, v]) => withKey(k, v));
+    }
     const byName: Record<string, any> = hostsMap;
     const out: any[] = [];
     const seen = new Set<string>();
-    for (const n of order) if (byName[n] && !seen.has(n)) { out.push(byName[n]); seen.add(n); }
-    for (const [k, v] of Object.entries(byName)) if (!seen.has(k)) out.push(v);
+    for (const n of order) if (byName[n] && !seen.has(n)) { out.push(withKey(n, byName[n])); seen.add(n); }
+    for (const [k, v] of Object.entries(byName)) if (!seen.has(k)) out.push(withKey(k, v));
     return out;
   };
 

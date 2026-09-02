@@ -769,8 +769,34 @@ async fn config_import(axum::Json(body): axum::Json<serde_json::Value>) -> ApiRe
                 warnings.push("检测到旧格式 connections，已忽略以 projects 为准".into());
             }
             for (p_name, p_val) in map {
-                let proj: crate::config::ProjectConfig =
-                    serde_json::from_value(p_val.clone()).unwrap_or_default();
+                // 解析失败记 warning 跳过（对齐 Node 版逐项 try/catch），不再静默清空整项目
+                let mut proj = match serde_json::from_value::<crate::config::ProjectConfig>(
+                    p_val.clone(),
+                ) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        warnings.push(format!("跳过非法项目 {p_name}: {e}"));
+                        continue;
+                    }
+                };
+                // 主机名回填：hosts map 的 key 是唯一标识，源数据对象内 name 缺失时
+                // 用 key 补齐（对齐 Node 版 normalize.name = hName）；key 空白的跳过并告警
+                let mut skipped_hosts = 0u32;
+                for env in proj.environments.values_mut() {
+                    for (h_name, mut hc) in std::mem::take(&mut env.hosts) {
+                        if h_name.trim().is_empty() {
+                            skipped_hosts += 1;
+                            continue;
+                        }
+                        if hc.name.trim().is_empty() {
+                            hc.name = h_name.clone();
+                        }
+                        env.hosts.insert(h_name, hc);
+                    }
+                }
+                if skipped_hosts > 0 {
+                    warnings.push(format!("项目 {p_name} 跳过空白主机名 {skipped_hosts} 个"));
+                }
                 match cfg.projects.remove(p_name) {
                     None => {
                         added_projects += 1;
