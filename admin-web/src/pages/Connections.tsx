@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Table, Button, Modal, Form, Input, InputNumber, message, Popconfirm, Card, Space, Tag, Empty, Typography, Collapse, Switch, Select, Alert, Upload, List, Spin, theme } from "antd";
-import { PlusOutlined, ReloadOutlined, ApiOutlined, SafetyCertificateOutlined, DownloadOutlined, UploadOutlined, InfoCircleOutlined, ProjectOutlined, AppstoreOutlined, EditOutlined, DeleteOutlined, StarOutlined, StarFilled } from "@ant-design/icons";
+import { PlusOutlined, ReloadOutlined, ApiOutlined, SafetyCertificateOutlined, DownloadOutlined, UploadOutlined, ProjectOutlined, AppstoreOutlined, EditOutlined, DeleteOutlined, StarOutlined, StarFilled } from "@ant-design/icons";
 import { api } from "../api/client";
 
 // Switch + 右侧说明文字的受控包装：作为 Form.Item 的单个子元素，保证 value/onChange 注入正常
@@ -537,7 +537,6 @@ export default function Connections() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, height: "100%" }}>
-      <Alert closable type="info" showIcon icon={<InfoCircleOutlined />} message="复用 ~/.ssh/config" description="Host 可填别名（如 myserver），自动复用本地 SSH 配置；如需自定义路径可在设置中配置 ssh-config-file（后续支持）" style={{ borderRadius: 12, flexShrink: 0 }} />
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12, flexShrink: 0 }}>
         <div>
           <Typography.Title level={4} style={{ margin: 0, fontWeight: 700 }}>
@@ -717,7 +716,7 @@ export default function Connections() {
             <Input placeholder="例如：web-01" />
           </Form.Item>
           <Form.Item name="host" label="主机地址" rules={[{ required: true, message: "请输入主机地址" }, { validator: validateHostAddress }]}>
-            <Input placeholder="例如：192.168.1.100 或 myserver（复用 ~/.ssh/config）" />
+            <Input placeholder="例如：192.168.1.100 或 myserver" />
           </Form.Item>
           <Form.Item name="port" label="端口" initialValue={22} rules={[{ validator: validatePort }]}>
             <InputNumber min={1} max={65535} style={{ width: "100%" }} />

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import { HashRouter, Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Layout, Menu, Typography, ConfigProvider, Select, Tag, Button, theme as antdTheme } from "antd";
 import zhCN from "antd/locale/zh_CN";
@@ -60,6 +60,10 @@ function useThemeMode(){
 export default function App() {
   const { mode, setMode, effective } = useThemeMode();
   const isDark = effective === "dark";
+  // 同步到 html[data-theme]，供全局滚动条等 CSS 按主题切换
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = effective;
+  }, [effective]);
   const [version, setVersion] = useState<string>("");
   const [configPath, setConfigPath] = useState<string>("");
   useEffect(() => {

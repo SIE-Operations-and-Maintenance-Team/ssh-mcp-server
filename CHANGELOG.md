@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.1
+
+### 修复
+
+- **连接管理页移除「复用 ~/.ssh/config」提示横幅**：主机地址占位文案同步精简；Host 别名解析能力后端保留不受影响
+- **暗黑模式滚动条白底优化**：滚动条样式由仅 `html` 扩展为全局所有滚动容器，轨道透明、滑块按主题着色（暗黑为半透明白），并通过 `color-scheme`/`data-theme` 与主题切换即时联动
+
+**对比 v1.1.0**：https://github.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server/compare/v1.1.0...v1.1.1
+
 ## v1.1.0
 
 本版本起全面转向 npx 分发形态：`npx -y @keysqiu/ssh-mcp-server@latest` 一行配置即可使用，首次调用自动拉起常驻服务，Web 管理台与 MCP 通道同进程共享配置、改动即时生效；包名由 `@sieop/ssh-mcp-server` 迁移至 `@keysqiu/ssh-mcp-server` 并首次发布 npm。桌面应用停止新功能迭代，存量用户可继续使用。
