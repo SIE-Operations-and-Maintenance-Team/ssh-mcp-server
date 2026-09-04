@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1.2
+
+### 修复
+
+- **npx 升级 EBUSY 根治**：常驻服务进程的 CWD 不再落在 npx 缓存包目录内（改用用户主目录），Windows 下目录锁不再阻止 npm 升级重装时 rename 包目录，彻底消除 `EBUSY: resource busy or locked, rename ...build` 导致的 MCP 连接失败
+- **升级自动生效**：代理启动时对比常驻服务与本包版本，常驻服务版本落后时自动终止并拉起新版（按监听端口定位 PID，非数字版本/回滚场景一律复用不误杀）；此前升级后旧版本常驻服务会一直驻留
+
+**对比 v1.1.1**：https://github.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server/compare/v1.1.1...v1.1.2
+
 ## v1.1.1
 
 ### 修复

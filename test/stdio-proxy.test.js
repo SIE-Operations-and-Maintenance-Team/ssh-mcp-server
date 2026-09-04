@@ -1,10 +1,18 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import net from "node:net";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import url from "node:url";
-import { probeAdminServer, extractResponseJsonLines } from "../build/cli/stdio-proxy.js";
+import {
+  probeAdminServer,
+  extractResponseJsonLines,
+  getAdminServerVersion,
+  compareVersions,
+  parseListenerOutput,
+  findListenerPids,
+} from "../build/cli/stdio-proxy.js";
 
 const rootDir = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), "..");
 
@@ -73,6 +81,89 @@ describe("stdio-proxy", () => {
         server.close();
       }
       assert.equal(await probeAdminServer(port, 300), false);
+    });
+  });
+
+  describe("compareVersions", () => {
+    it("orders patch, minor and major segments", () => {
+      assert.ok(compareVersions("1.1.1", "1.1.2") < 0);
+      assert.ok(compareVersions("1.1.2", "1.1.1") > 0);
+      assert.ok(compareVersions("1.2.0", "1.1.9") > 0);
+      assert.ok(compareVersions("2.0.0", "1.99.99") > 0);
+    });
+
+    it("compares multi-digit segments numerically and treats missing segments as zero", () => {
+      assert.ok(compareVersions("1.10.0", "1.9.0") > 0);
+      assert.equal(compareVersions("1.2.0", "1.2"), 0);
+      assert.equal(compareVersions("1.2.3", "1.2.3"), 0);
+    });
+  });
+
+  describe("getAdminServerVersion", () => {
+    it("returns the version string from system/info", async () => {
+      const { server, port } = await startStubAdmin({
+        "/admin/api/system/info": (_req, res) => {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ version: "1.1.1", port }));
+        },
+      });
+      try {
+        assert.equal(await getAdminServerVersion(port), "1.1.1");
+      } finally {
+        server.close();
+      }
+    });
+
+    it("returns null for a missing version field or a closed port", async () => {
+      const { server, port } = await startStubAdmin({
+        "/admin/api/system/info": (_req, res) => {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ port }));
+        },
+      });
+      try {
+        assert.equal(await getAdminServerVersion(port), null);
+      } finally {
+        server.close();
+      }
+      assert.equal(await getAdminServerVersion(port, 300), null);
+    });
+  });
+
+  describe("parseListenerOutput", () => {
+    it("parses Windows netstat -ano lines and matches the local port exactly", () => {
+      const stdout = [
+        "",
+        "  协议  本地地址          外部地址        状态           PID",
+        "  TCP    127.0.0.1:61823        0.0.0.0:0              LISTENING       7732",
+        "  TCP    [::1]:61823            [::]:0                 LISTENING       7732",
+        "  TCP    0.0.0.0:618231         0.0.0.0:0              LISTENING       999",
+        "  TCP    127.0.0.1:61823        1.2.3.4:443            ESTABLISHED     7732",
+        "  TCP    127.0.0.1:135          0.0.0.0:0              LISTENING       1234",
+        "",
+      ].join("\r\n");
+      assert.deepEqual(parseListenerOutput(stdout, "win32", 61823), [7732]);
+      // 端口 6182 不能误匹配 :61823
+      assert.deepEqual(parseListenerOutput(stdout, "win32", 6182), []);
+    });
+
+    it("parses lsof -t output lines on unix", () => {
+      assert.deepEqual(parseListenerOutput("7732\n\n8100\n", "linux", 61823), [7732, 8100]);
+      assert.deepEqual(parseListenerOutput("", "linux", 61823), []);
+    });
+  });
+
+  describe("findListenerPids (integration)", () => {
+    it("finds the current process listening on an ephemeral port", async (t) => {
+      const server = net.createServer(() => {});
+      const port = await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server.address().port)));
+      try {
+        const pids = await findListenerPids(port);
+        if (pids.length === 0) return t.skip("netstat/lsof 在当前环境不可用");
+        assert.ok(pids.includes(process.pid), `期望包含当前进程 ${process.pid}，实际 ${pids}`);
+      } finally {
+        server.close();
+      }
     });
   });
 

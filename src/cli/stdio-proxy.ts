@@ -6,12 +6,14 @@
  * - admin 服务未运行时自动分离拉起，日志落 config 同目录 daemon.log；
  * - 本进程所有日志走 stderr，stdout 仅承载 MCP 协议消息。
  */
-import { spawn } from "node:child_process";
+import { spawn, exec } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { ConfigStore, getGlobalConfigPath } from "../services/config-store.js";
 import { DEFAULT_ADMIN_PORT } from "../models/admin-types.js";
+import { SERVER_CONFIG } from "../config/server.js";
 import { Logger } from "../utils/logger.js";
 
 /** 探测端口上是否为本项目的 admin 常驻服务（校验 system/info 返回结构） */
@@ -122,21 +124,98 @@ async function resolveAdminPort(cliPort?: number): Promise<number> {
   return DEFAULT_ADMIN_PORT;
 }
 
-/** 确保 admin 常驻服务在目标端口可用，未运行则以分离进程拉起并等待就绪 */
-export async function ensureAdminServer(port: number): Promise<void> {
-  if (await probeAdminServer(port)) return;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
+/** 读取目标端口 admin 常驻服务的版本号，探测失败或结构异常返回 null */
+export async function getAdminServerVersion(port: number, timeoutMs = 800): Promise<string | null> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/admin/api/system/info`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { version?: unknown };
+    return typeof body?.version === "string" && body.version ? body.version : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 逐段比较 x.y.z 版本号，返回 a-b（>0 表示 a 更新；缺省段按 0 处理） */
+export function compareVersions(a: string, b: string): number {
+  const seg = (v: string) => v.split(".").map((n) => parseInt(n, 10) || 0);
+  const sa = seg(a);
+  const sb = seg(b);
+  for (let i = 0; i < 3; i++) {
+    const diff = (sa[i] ?? 0) - (sb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+/**
+ * 解析端口监听进程的 PID 集合（导出仅为测试）。
+ * Windows 取 netstat -ano 输出（TCP <local> <foreign> LISTENING <pid>），并按本地地址精确匹配端口；
+ * 其他平台取 lsof -t 输出（每行一个 PID，已由参数过滤端口）。
+ */
+export function parseListenerOutput(stdout: string, platform: string, port: number): number[] {
+  const pids = new Set<number>();
+  for (const raw of stdout.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (platform === "win32") {
+      if (!line.includes("LISTENING")) continue;
+      const parts = line.split(/\s+/);
+      // TCP <local> <foreign> LISTENING <pid>
+      if (parts.length < 5 || !parts[1].endsWith(`:${port}`)) continue;
+      const pid = parseInt(parts[4], 10);
+      if (Number.isInteger(pid) && pid > 0) pids.add(pid);
+    } else {
+      const pid = parseInt(line, 10);
+      if (Number.isInteger(pid) && pid > 0) pids.add(pid);
+    }
+  }
+  return [...pids];
+}
+
+/** 查询监听指定 TCP 端口的进程 PID（Windows netstat / macOS·Linux lsof），查询失败返回空数组 */
+export async function findListenerPids(port: number): Promise<number[]> {
+  const cmd =
+    process.platform === "win32"
+      ? `netstat -ano -p tcp | findstr "LISTENING"`
+      : `lsof -nP -iTCP:${port} -sTCP:LISTEN -t`;
+  return new Promise((resolve) => {
+    exec(cmd, { timeout: 5000, windowsHide: true }, (err, stdout) => {
+      if (err && !stdout) return resolve([]);
+      resolve(parseListenerOutput(String(stdout), process.platform, port));
+    });
+  });
+}
+
+/** 定位入口脚本（argv[1]），供分离拉起 daemon 使用 */
+function locateEntryScript(): string {
   const script = process.argv[1] ? path.resolve(process.argv[1]) : "";
   if (!script || !fs.existsSync(script)) {
     throw new Error(`无法定位入口脚本（argv[1]=${process.argv[1] ?? "空"}），请改用 --stdio 或手动运行 --admin`);
   }
+  return script;
+}
+
+/**
+ * 以分离进程拉起 admin 常驻服务并等待就绪。
+ * cwd 必须用主目录而非包安装目录：Windows 下进程 CWD 所在目录不可被重命名，
+ * npx 升级重装时 npm 需要先 rename 包目录，否则 EBUSY（v1.1.1 及之前因此升级失败）。
+ */
+async function spawnAdminServerAndWait(port: number): Promise<void> {
+  const script = locateEntryScript();
   const logDir = path.dirname(getGlobalConfigPath());
   fs.mkdirSync(logDir, { recursive: true });
   const logFile = path.join(logDir, "daemon.log");
   const child = spawn(process.execPath, [script, "--admin", "--admin-port", String(port)], {
     detached: true,
     stdio: ["ignore", fs.openSync(logFile, "a"), fs.openSync(logFile, "a")],
-    cwd: path.dirname(script),
+    cwd: os.homedir(),
   });
   child.unref();
 
@@ -144,9 +223,56 @@ export async function ensureAdminServer(port: number): Promise<void> {
   while (Date.now() < deadline) {
     if (child.exitCode !== null) break;
     if (await probeAdminServer(port, 500)) return;
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await sleep(300);
   }
   throw new Error(`admin 常驻服务在端口 ${port} 未能就绪，请查看日志: ${logFile}`);
+}
+
+/**
+ * 已运行的 daemon 版本落后于当前包时将其停止并等待端口释放（供调用方拉起新版），否则返回 false。
+ * 版本未知或高于当前包（回滚场景）一律复用，避免误杀。
+ */
+async function stopOutdatedAdminServer(port: number): Promise<boolean> {
+  const daemonVersion = await getAdminServerVersion(port);
+  // 非数字版本（stub/dev 等自定义构建）不参与比较，一律复用
+  if (!daemonVersion || !/^\d+\.\d+\.\d+/.test(daemonVersion)) return false;
+  if (compareVersions(daemonVersion, SERVER_CONFIG.version) >= 0) return false;
+  const pids = await findListenerPids(port);
+  if (pids.length === 0) return false;
+  Logger.log(`admin 常驻服务版本 ${daemonVersion} 低于当前 ${SERVER_CONFIG.version}，自动重启以应用新版本`, "info");
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // 进程可能恰好自行退出
+    }
+  }
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    if ((await findListenerPids(port)).length === 0) return true;
+    await sleep(300);
+  }
+  // 宽限期内未退出则强杀
+  for (const pid of await findListenerPids(port)) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // 进程已退出
+    }
+  }
+  await sleep(500);
+  return true;
+}
+
+/** 确保 admin 常驻服务在目标端口可用：未运行则分离拉起；运行中但版本落后则自动换新 */
+export async function ensureAdminServer(port: number): Promise<void> {
+  if (await probeAdminServer(port)) {
+    if (await stopOutdatedAdminServer(port)) {
+      await spawnAdminServerAndWait(port);
+    }
+    return;
+  }
+  await spawnAdminServerAndWait(port);
 }
 
 /**

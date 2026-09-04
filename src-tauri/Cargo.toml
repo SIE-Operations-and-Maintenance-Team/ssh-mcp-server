@@ -1,6 +1,6 @@
 [package]
 name = "ssh-mcp-server-gui"
-version = "1.1.1"
+version = "1.1.2"
 edition = "2021"
 
 # 架构对齐 SIE-Operations-and-Maintenance-Team/publish-tools（SmomPublish）：

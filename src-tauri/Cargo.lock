@@ -3881,7 +3881,7 @@ dependencies = [
 
 [[package]]
 name = "ssh-mcp-server-gui"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "axum",
  "include_dir",
