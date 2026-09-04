@@ -20,12 +20,13 @@
 - 📤 **上传 / 📥 下载文件** —— 配置分发、日志拉取、大文件断点续传
 - 🖥️ **多机管理** —— 项目 → 环境 → 主机三级树，一次配置处处可用
 
-两种使用形态，按需选择：
+多种使用形态，按需选择：
 
 | 形态 | 适合场景 |
 |------|---------|
-| **CLI / npm 包** | 作为 stdio MCP Server 挂给任意 MCP 客户端，轻量即用 |
-| **Windows 桌面应用**（推荐） | 纯托盘常驻 + 内置 Web 管理台 + 在线自更新，零 Node.js 环境 |
+| **npx 一键使用**（推荐） | 一行配置接入任意 MCP 客户端，自动带起常驻服务与 Web 管理台 |
+| **纯 stdio / 全局安装** | 不需要管理台的极简场景，SSH 参数直连 |
+| **Windows 桌面应用**（存量） | 旧版托盘应用，已停止新功能迭代，已安装用户可继续使用 |
 
 ## ✨ 核心特性
 
@@ -63,47 +64,64 @@
 
 <div align="center"><img src="https://raw.githubusercontent.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server/main/docs/screenshots/connections.png" alt="连接管理界面" width="820"></div>
 
-**系统页** —— 服务状态与 MCP 客户端一键注册：
-
-<div align="center"><img src="https://raw.githubusercontent.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server/main/docs/screenshots/system.png" alt="系统页" width="820"></div>
-
 ## 🚀 快速开始
 
-### 方式一：Windows 桌面应用
+### 方式一：npx 一键使用（推荐）
 
-从 [Releases](https://github.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server/releases) 下载 `SSH-MCP-Server_x.x.x_x64-setup.exe` 安装。启动后驻留系统托盘，托盘菜单「打开管理页」进入 Web 控制台。
-
-已安装用户后续升级自动完成，无需手动操作。
-
-### 方式二：npm 包（stdio MCP Server）
-
-```bash
-# 全局安装
-npm install -g @sieop/ssh-mcp-server
-```
-
-在 MCP 客户端中注册（以 Claude Code 为例）：
-
-```bash
-claude mcp add ssh-server -- ssh-mcp-server --host your.server.com --username root --password YOUR_PWD
-```
-
-或直接写 JSON 配置：
+MCP 客户端 JSON 配置（Claude Code、Cursor 等通用）：
 
 ```json
 {
   "mcpServers": {
     "ssh-server": {
       "command": "npx",
-      "args": ["-y", "@sieop/ssh-mcp-server", "--host", "your.server.com", "--username", "root", "--password", "YOUR_PWD"]
+      "args": ["-y", "@keysqiu/ssh-mcp-server@latest"]
     }
   }
 }
 ```
 
-也支持配置文件与多连接模式，详见 [`docs/migration.md`](docs/migration.md) 与 CLI 帮助（`--help`）。
+也可命令行注册：
 
-### 方式三：源码构建
+```bash
+claude mcp add ssh-server -- npx -y @keysqiu/ssh-mcp-server@latest
+```
+
+首次调用会自动拉起常驻服务，之后：
+
+- 🖥️ **Web 管理台**：浏览器打开 `http://127.0.0.1:61823/admin/`，可视化维护项目 → 环境 → 主机，保存即时生效，无需重启 MCP 会话
+- 🔁 **常驻复用**：MCP 客户端经 stdio 自动转发到常驻服务；客户端退出后服务继续驻留，下次会话秒级复用
+- 🔌 **自定义端口**：在 args 中加 `--admin-port <port>`（默认 61823）
+
+### 方式二：高级用法（纯 stdio / 全局安装）
+
+配置中出现 SSH 参数或 `--config-file` 时自动回到传统 stdio 模式（不拉经常驻服务）：
+
+```json
+{
+  "mcpServers": {
+    "ssh-server": {
+      "command": "npx",
+      "args": ["-y", "@keysqiu/ssh-mcp-server@latest", "--host", "your.server.com", "--username", "root", "--password", "YOUR_PWD"]
+    }
+  }
+}
+```
+
+也可全局安装后直接使用二进制：
+
+```bash
+npm install -g @keysqiu/ssh-mcp-server
+claude mcp add ssh-server -- ssh-mcp-server --host your.server.com --username root --password YOUR_PWD
+```
+
+其他开关：手动启动常驻管理台 `--admin`；强制传统 stdio `--stdio`。配置文件与多连接模式详见 [`docs/migration.md`](docs/migration.md) 与 CLI 帮助（`--help`）。
+
+### 方式三：Windows 桌面应用（存量）
+
+从 [Releases](https://github.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server/releases) 下载 `SSH-MCP-Server_x.x.x_x64-setup.exe` 安装。启动后驻留系统托盘，托盘菜单「打开管理页」进入 Web 控制台。该形态已停止新功能迭代，建议迁移到 npx 形态。
+
+### 方式四：源码构建
 
 ```bash
 git clone https://github.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server.git

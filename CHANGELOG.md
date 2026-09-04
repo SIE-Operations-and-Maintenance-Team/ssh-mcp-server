@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.1.0
+
+本版本起全面转向 npx 分发形态：`npx -y @keysqiu/ssh-mcp-server@latest` 一行配置即可使用，首次调用自动拉起常驻服务，Web 管理台与 MCP 通道同进程共享配置、改动即时生效；包名由 `@sieop/ssh-mcp-server` 迁移至 `@keysqiu/ssh-mcp-server` 并首次发布 npm。桌面应用停止新功能迭代，存量用户可继续使用。
+
+### 功能
+
+- **npx 代理模式（新默认）**：无参数运行时自动探测/分离拉起 admin 常驻服务（端口优先级 `--admin-port > 配置文件 > 61823`，就绪等待 15s），本进程仅做 stdio→HTTP 转发（兼容 JSON 与 SSE 响应）；MCP 客户端退出后常驻服务继续驻留，下次会话秒级复用；常驻服务日志落 config 同目录 `daemon.log`
+- **配置热生效**：管理台增删改主机经已有 watcher 同步至常驻服务的连接管理器，MCP 工具调用即时可用新配置，无需重启会话
+- **兼容开关**：`--stdio` 强制传统 stdio 模式；配置中出现任何 SSH 参数（`--host`/`--config-file`/`--ssh` 等）时自动回退传统模式；`--admin` 手动常驻模式不变
+- **审计持久化（npm 形态）**：`better-sqlite3` 纳入运行时依赖，npx/CLI 形态审计记录落 `~/.config/ssh-mcp-server/audit.db`，重启不再丢失（与桌面版对齐）
+
+### 修复
+
+- **移除 Web 管理台「系统」菜单**：系统页（自启动/应用更新/应用控制/一键注册）随 npx 形态下语义失效一并移除，界面仅保留连接管理/安全策略/审计日志/备份恢复/设置；对应后端接口暂保留未删
+
+**对比 v1.0.5**：https://github.com/SIE-Operations-and-Maintenance-Team/ssh-mcp-server/compare/v1.0.5...v1.1.0
+
 ## v1.0.5
 
 修复 PublishTools 同步导入后主机名称显示为空、编辑保存变成新增两个问题（同根因：桌面版导入未回填主机对象 name 字段）；启动时自动迁移治愈存量脏数据。

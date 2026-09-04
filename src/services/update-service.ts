@@ -5,7 +5,7 @@ import { SERVER_CONFIG } from "../config/server.js";
 // 应用更新：对照 npm registry 的 latest 版本（本项目经 npm 分发），
 // 语义移植自 MCP-DB-Tools 的 UpdateChecker（Velopack/GitHub Releases）：
 // status 只读缓存、check 走网络、installed 区分 npm 安装与本地开发模式。
-const PKG = "@sieop/ssh-mcp-server";
+const PKG = "@keysqiu/ssh-mcp-server";
 const REGISTRY_URL = `https://registry.npmjs.org/${encodeURIComponent(PKG)}`;
 
 export interface UpdateStatus {

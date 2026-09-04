@@ -4,6 +4,8 @@ import { SshMcpServer } from "./core/mcp-server.js";
 import { SERVER_CONFIG } from "./config/server.js";
 import { Logger } from "./utils/logger.js";
 import { CommandLineParser } from "./cli/command-line-parser.js";
+import { resolveRunMode } from "./cli/run-mode.js";
+import { runProxyMode } from "./cli/stdio-proxy.js";
 import { ConfigStore, getGlobalConfigPath } from "./services/config-store.js";
 import { DEFAULT_ADMIN_PORT } from "./models/admin-types.js";
 import { startAdminServer } from "./server/index.js";
@@ -33,6 +35,7 @@ Options:
   --pty                           Allocate pseudo-tty for exec mode commands (default: true)
   --try-keyboard                  Enable keyboard-interactive authentication
   --pre-connect                   Pre-connect to all SSH servers on startup
+  --stdio                         Force legacy stdio MCP mode (no auto-started admin daemon)
   --admin                         Start admin HTTP server (127.0.0.1:${DEFAULT_ADMIN_PORT})
   --admin-port <port>             Admin HTTP port (default ${DEFAULT_ADMIN_PORT}, overrides config file)
   --version, -v                   Print package version
@@ -62,11 +65,13 @@ async function main(): Promise<void> {
     return;
   }
 
+  const runMode = resolveRunMode(process.argv.slice(2));
+
   // Admin mode: single Fastify host 127.0.0.1, priority CLI > file > default
-  if (hasArg("--admin")) {
+  if (runMode.mode === "admin") {
     const parsed = CommandLineParser.parseArgs();
     // --admin-port is the authoritative admin port (distinct from --port SSH port)
-    const cliPort = parsed.adminPort;
+    const cliPort = runMode.adminPort;
     // Config file override chain: --config-file > SSH_MCP_CONFIG env > global path
     const configPath = parsed.configFile ?? process.env.SSH_MCP_CONFIG ?? getGlobalConfigPath();
     // For admin mode, we still need to respect stored port if no CLI override
@@ -79,6 +84,17 @@ async function main(): Promise<void> {
     const port = cliPort ?? filePort ?? DEFAULT_ADMIN_PORT;
     const srv = await startAdminServer({ port, configPath });
     Logger.log(`Admin server listening on 127.0.0.1:${srv.port}`, "info");
+    return;
+  }
+
+  // Proxy mode（npx 默认）: 确保 admin 常驻服务运行后做 stdio→HTTP 转发
+  if (runMode.mode === "proxy") {
+    try {
+      await runProxyMode({ adminPort: runMode.adminPort });
+    } catch (error) {
+      Logger.log(error instanceof Error ? error.message : String(error), "error");
+      process.exitCode = 1;
+    }
     return;
   }
 

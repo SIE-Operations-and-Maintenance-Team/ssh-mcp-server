@@ -9,7 +9,7 @@
   "mcpServers": {
     "ssh-mcp-server": {
       "command": "npx",
-      "args": ["-y", "@sieop/ssh-mcp-server", "--host", "1.1.1.1", "--username", "root", "--password", "x"]
+      "args": ["-y", "@keysqiu/ssh-mcp-server", "--host", "1.1.1.1", "--username", "root", "--password", "x"]
     }
   }
 }
@@ -36,7 +36,7 @@
 启动：
 
 ```bash
-npx @sieop/ssh-mcp-server --admin --admin-port 61823
+npx @keysqiu/ssh-mcp-server --admin --admin-port 61823
 # 浏览器打开 http://127.0.0.1:61823/admin/
 ```
 
